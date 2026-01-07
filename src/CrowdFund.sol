@@ -12,6 +12,7 @@
 
 pragma solidity ^0.8.19;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 /**
  * @title Crowd Fund Project
  * @author HackFlu
@@ -57,8 +58,9 @@ contract CrowdFund {
     error CrowdFund__NotEnded();
     error CrowdFund__CannotClaimAmount();
     error CrowdFund__AlreadyClaimed();
-    error CrowdFund__InsufficeintContractBalance();
-
+    error CrowdFund__InsufficientContractBalance();
+    error CrowdFund__GoalNotFullFilled();
+    error CrowdFund__TransferFailed();
     //////////////////////
     ////// events ///////
     /////////////////////
@@ -86,14 +88,14 @@ contract CrowdFund {
         _;
     }
 
-    modifier checkId(uint256 _id){
+    modifier checkId(uint256 _id) {
         if (_id > s_campaignCount) {
             revert CrowdFund__InvalidCampaignId();
         }
         _;
     }
     modifier checkAmount(uint256 _amount) {
-        if(_amount == 0){
+        if (_amount == 0) {
             revert CrowdFund__AmountCannotBeZero();
         }
         _;
@@ -108,11 +110,7 @@ contract CrowdFund {
      * @param _startAt for setting the start time
      * @param _endAt for setting the end time
      */
-    function launch(
-        uint256 _goal,
-        uint32 _startAt,
-        uint32 _endAt
-    ) external checkAddress(msg.sender) payable{
+    function launch(uint256 _goal, uint32 _startAt, uint32 _endAt) external payable checkAddress(msg.sender) {
         if (_goal == 0) {
             revert CrowdFund__AmountCannotBeZero();
         }
@@ -132,7 +130,7 @@ contract CrowdFund {
         newCampaign.totalPledge = 0;
         newCampaign.claimed = false;
         newCampaign.pledged = 0;
-        
+
         emit EventLaunched(_goal, _startAt, _endAt);
     }
 
@@ -140,7 +138,7 @@ contract CrowdFund {
      * @notice for cancelling the campaing ,if created by the mistake
      * @param _id for specific id
      */
-    function cancel(uint _id) external checkAddress(msg.sender) checkId(_id){
+    function cancel(uint256 _id) external checkAddress(msg.sender) checkId(_id) {
         Campaign memory campaign = s_trackCampaign[_id];
         if (campaign.creator != msg.sender) {
             revert CrowdFund__OnlyAccessToCreator();
@@ -157,10 +155,7 @@ contract CrowdFund {
      * @param _id unique id of campaign
      * @param _amount amount to add in Event
      */
-    function pledge(
-        uint _id,
-        uint256 _amount
-    ) external checkAddress(msg.sender) checkId(_id) checkAmount(_amount){
+    function pledge(uint256 _id, uint256 _amount) external checkAddress(msg.sender) checkId(_id) checkAmount(_amount) {
         Campaign storage campaign = s_trackCampaign[_id];
         if (block.timestamp < campaign.startAt) {
             revert CrowdFund__CampaignNotStarted();
@@ -173,7 +168,10 @@ contract CrowdFund {
         s_userAmount[_id][msg.sender] += _amount;
 
         // transferring the amount
-        i_token.transferFrom(msg.sender , address(this),_amount);
+        bool success = i_token.transferFrom(msg.sender, address(this), _amount);
+        if (!success) {
+            revert CrowdFund__TransferFailed();
+        }
         emit PledgeSuccessful(msg.sender, _id, _amount);
     }
 
@@ -182,7 +180,12 @@ contract CrowdFund {
      * @param _id for identifying the campaign
      * @param _amount amount to redeem
      */
-    function unpledge(uint256 _id, uint256 _amount) external checkAddress(msg.sender) checkId(_id) checkAmount(_amount){
+    function unpledge(uint256 _id, uint256 _amount)
+        external
+        checkAddress(msg.sender)
+        checkId(_id)
+        checkAmount(_amount)
+    {
         if (s_userAmount[_id][msg.sender] < _amount) {
             revert CrowdFund__InsufficientAmount();
         }
@@ -200,11 +203,14 @@ contract CrowdFund {
         campaign.totalPledge -= _amount;
         s_userAmount[_id][msg.sender] -= _amount;
 
+        // checking the contract balance
+        _calculateContractBalance(_amount);
+
         // tranfer from the contract to user
-        if(i_token.balanceOf(address(this)) < _amount){
-            revert CrowdFund__InsufficeintContractBalance();
+        bool success = i_token.transfer(msg.sender, _amount);
+        if (!success) {
+            revert CrowdFund__TransferFailed();
         }
-        i_token.transfer(msg.sender , _amount);
         emit UnpledgeSuccess(msg.sender, _amount);
     }
 
@@ -212,7 +218,7 @@ contract CrowdFund {
      * @notice to claim the amount.only for creator
      * @param _id id of campaign
      */
-    function claim(uint256 _id) external checkAddress(msg.sender) checkId(_id){
+    function claim(uint256 _id) external checkAddress(msg.sender) checkId(_id) {
         Campaign storage campaign = s_trackCampaign[_id];
         if (campaign.creator != msg.sender) {
             revert CrowdFund__CannotAccessClaimAmount();
@@ -226,9 +232,15 @@ contract CrowdFund {
         if (campaign.claimed) {
             revert CrowdFund__AlreadyClaimed();
         }
+        if (campaign.totalPledge != campaign.goal) {
+            revert CrowdFund__GoalNotFullFilled();
+        }
         campaign.claimed = true;
         // transfer to creator
-        i_token.transfer(msg.sender , i_token.balanceOf(address(this)));
+        bool success = i_token.transfer(msg.sender, i_token.balanceOf(address(this)));
+        if (!success) {
+            revert CrowdFund__TransferFailed();
+        }
         emit Claim(msg.sender, campaign.totalPledge);
     }
 
@@ -236,7 +248,7 @@ contract CrowdFund {
      * @notice for claiming the refund if the campaign goal does not match
      * @param _id for tracking the campaign
      */
-    function refund(uint256 _id) external checkAddress(msg.sender) checkId(_id){
+    function refund(uint256 _id) external checkAddress(msg.sender) checkId(_id) {
         Campaign memory campaign = s_trackCampaign[_id];
         if (block.timestamp <= campaign.endAt) {
             revert CrowdFund__CampaignEnded();
@@ -246,10 +258,53 @@ contract CrowdFund {
         }
         uint256 balance = s_userAmount[_id][msg.sender];
         s_userAmount[_id][msg.sender] = 0;
-
+        _calculateContractBalance(s_userAmount[_id][msg.sender]);
         // transfer to user
-        i_token.transfer(msg.sender , s_userAmount[_id][msg.sender]);
-
+        bool success = i_token.transfer(msg.sender, s_userAmount[_id][msg.sender]);
+        if (!success) {
+            revert CrowdFund__TransferFailed();
+        }
         emit RefundSuccessful(msg.sender, balance);
+    }
+
+    /////////////////////////////////
+    ///// internal function /////////
+    /////////////////////////////////
+    function _calculateContractBalance(uint256 _amount) internal view {
+        if (i_token.balanceOf(address(this)) < _amount) {
+            revert CrowdFund__InsufficientContractBalance();
+        }
+    }
+
+    /////////////////////////////////////
+    ////// view and pure function //////
+    ////////////////////////////////////
+    // address creator; // setting the creator address
+    // bool claimed; // does the creator claimed the amount
+    // uint32 startAt; // starting campaign time
+    // uint32 endAt; // ending campaign time
+    // uint256 goal; // setting the goal amount
+    // uint256 pledged; // no of people pledged
+    // uint256 totalPledge; // to track the total amount for checking the goal
+    /**
+     * @notice to get the campaign details from struct
+     * @param _id for campaign
+     */
+    function getTrackCampaign(uint256 _id)
+        external
+        view
+        checkId(_id)
+        returns (
+            address creator,
+            bool calimed,
+            uint32 startAt,
+            uint32 endAt,
+            uint256 goal,
+            uint256 pledged,
+            uint256 totalPledge
+        )
+    {
+        Campaign storage c = s_trackCampaign[_id];
+        return (c.creator, c.claimed, c.startAt, c.endAt, c.goal, c.pledged, c.totalPledge);
     }
 }
