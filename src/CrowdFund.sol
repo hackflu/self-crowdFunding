@@ -138,7 +138,7 @@ contract CrowdFund {
      * @notice for cancelling the campaing ,if created by the mistake
      * @param _id for specific id
      */
-    function cancel(uint256 _id) external checkAddress(msg.sender) checkId(_id) {
+    function cancel(uint256 _id) external  checkId(_id) {
         Campaign memory campaign = s_trackCampaign[_id];
         if (campaign.creator != msg.sender) {
             revert CrowdFund__OnlyAccessToCreator();
@@ -226,7 +226,7 @@ contract CrowdFund {
         if (campaign.endAt > block.timestamp) {
             revert CrowdFund__NotEnded();
         }
-        if (campaign.totalPledge <= campaign.goal) {
+        if (campaign.totalPledge < campaign.goal) {
             revert CrowdFund__CannotClaimAmount();
         }
         if (campaign.claimed) {
@@ -306,5 +306,9 @@ contract CrowdFund {
     {
         Campaign storage c = s_trackCampaign[_id];
         return (c.creator, c.claimed, c.startAt, c.endAt, c.goal, c.pledged, c.totalPledge);
+    }
+
+    function getUserAccount(uint256 _id , address _addr) external view returns(uint256) {
+        return s_userAmount[_id][_addr];
     }
 }
