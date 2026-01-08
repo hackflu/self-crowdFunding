@@ -20,6 +20,7 @@ contract CrowdFundTest is Test {
         vm.prank(user_1);
         token.approve(address(crowdFund), 100 ether);
     }
+
     ////////////////////////
     ///////// launch //////
     ///////////////////////
@@ -29,15 +30,7 @@ contract CrowdFundTest is Test {
         uint32 endTime = uint32(block.timestamp + 600 seconds);
         vm.startPrank(creator);
         crowdFund.launch(_goal, startTime, endTime);
-        (
-            address _creator,
-            ,
-            uint32 startAt,
-            uint32 endAt,
-            uint256 goal,
-            ,
-
-        ) = crowdFund.getTrackCampaign(1);
+        (address _creator,, uint32 startAt, uint32 endAt, uint256 goal,,) = crowdFund.getTrackCampaign(1);
         vm.stopPrank();
         assertEq(startTime, startAt);
         assertEq(endTime, endAt);
@@ -50,11 +43,7 @@ contract CrowdFundTest is Test {
         uint32 startTime = uint32(block.timestamp + 300 seconds);
         uint32 endTime = uint32(block.timestamp + 600 seconds);
         vm.startPrank(creator);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                CrowdFund.CrowdFund__AmountCannotBeZero.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__AmountCannotBeZero.selector));
         crowdFund.launch(_goal, startTime, endTime);
     }
 
@@ -66,11 +55,7 @@ contract CrowdFundTest is Test {
         uint32 endTime = uint32(block.timestamp + 1 days);
         console.log("current time : ", block.timestamp);
         console.log("current time after: ", block.timestamp);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                CrowdFund.CrowdFund__StartTimeMustBeInFuture.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__StartTimeMustBeInFuture.selector));
         crowdFund.launch(_goal, pastTime, endTime);
     }
 
@@ -78,11 +63,7 @@ contract CrowdFundTest is Test {
         uint256 _goal = 1000 ether;
         uint32 startTime = uint32(block.timestamp + 100);
         uint32 endTime = uint32(block.timestamp);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                CrowdFund.CrowdFund__EndTimeCannotBeBeforeStartTime.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__EndTimeCannotBeBeforeStartTime.selector));
         crowdFund.launch(_goal, startTime, endTime);
     }
 
@@ -111,26 +92,20 @@ contract CrowdFundTest is Test {
     function testCancel() public preCampaign {
         vm.prank(creator);
         crowdFund.cancel(1);
-        (, , , , uint256 goal, , ) = crowdFund.getTrackCampaign(1);
+        (,,,, uint256 goal,,) = crowdFund.getTrackCampaign(1);
         assertEq(goal, 0);
     }
 
     function testCancelWithInvalidAddress() public preCampaign {
         vm.prank(address(0x123));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                CrowdFund.CrowdFund__OnlyAccessToCreator.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__OnlyAccessToCreator.selector));
         crowdFund.cancel(1);
     }
 
     function testCancelWithGtStartTime() public preCampaign {
         vm.prank(creator);
         vm.warp(block.timestamp + 70);
-        vm.expectRevert(
-            abi.encodeWithSelector(CrowdFund.CrowdFund__CannotCancel.selector)
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__CannotCancel.selector));
         crowdFund.cancel(1);
     }
 
@@ -160,9 +135,7 @@ contract CrowdFundTest is Test {
 
     function testPledgeWithInvalidAddress() public preCampaign {
         vm.startPrank(address(0));
-        vm.expectRevert(
-            abi.encodeWithSelector(CrowdFund.CrowdFund__InvalidAddress.selector)
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__InvalidAddress.selector));
         crowdFund.pledge(1, 100 ether);
         vm.stopPrank();
     }
@@ -170,22 +143,14 @@ contract CrowdFundTest is Test {
     function testPledgeWithCampaignNotStarted() public preCampaign {
         vm.warp(block.timestamp - 10);
         vm.startPrank(user_1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                CrowdFund.CrowdFund__CampaignNotStarted.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__CampaignNotStarted.selector));
         crowdFund.pledge(1, 100 ether);
         vm.stopPrank();
     }
 
     function testPledgeWithInvalidId() public preCampaign {
         vm.startPrank(user_1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                CrowdFund.CrowdFund__InvalidCampaignId.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__InvalidCampaignId.selector));
         crowdFund.pledge(2, 100 ether);
         vm.stopPrank();
     }
@@ -193,11 +158,7 @@ contract CrowdFundTest is Test {
     function testPledgeWithInvalidAmount() public preCampaign {
         vm.warp(block.timestamp + 10);
         vm.startPrank(user_1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                CrowdFund.CrowdFund__AmountCannotBeZero.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__AmountCannotBeZero.selector));
         crowdFund.pledge(1, 0);
         vm.stopPrank();
     }
@@ -220,11 +181,7 @@ contract CrowdFundTest is Test {
         vm.warp(block.timestamp + 10);
         vm.startPrank(user_1);
         crowdFund.pledge(1, 100 ether);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                CrowdFund.CrowdFund__InsufficientAmount.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(CrowdFund.CrowdFund__InsufficientAmount.selector));
         crowdFund.unpledge(1, 150 ether);
         vm.stopPrank();
     }
@@ -280,8 +237,7 @@ contract CrowdFundTest is Test {
         vm.warp(block.timestamp + 200);
         vm.startPrank(creator);
         crowdFund.claim(1);
-        (, bool claimed, , , uint256 _goal, , uint256 totalPledged) = crowdFund
-            .getTrackCampaign(1);
+        (, bool claimed,,, uint256 _goal,, uint256 totalPledged) = crowdFund.getTrackCampaign(1);
         assertEq(claimed, true);
         assertEq(totalPledged, _goal);
         vm.stopPrank();

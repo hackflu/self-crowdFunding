@@ -138,7 +138,7 @@ contract CrowdFund {
      * @notice for cancelling the campaing ,if created by the mistake
      * @param _id for specific id
      */
-    function cancel(uint256 _id) external  checkId(_id) {
+    function cancel(uint256 _id) external checkId(_id) {
         Campaign memory campaign = s_trackCampaign[_id];
         if (campaign.creator != msg.sender) {
             revert CrowdFund__OnlyAccessToCreator();
@@ -308,7 +308,7 @@ contract CrowdFund {
         return (c.creator, c.claimed, c.startAt, c.endAt, c.goal, c.pledged, c.totalPledge);
     }
 
-    function getUserAccount(uint256 _id , address _addr) external view returns(uint256) {
+    function getUserAccount(uint256 _id, address _addr) external view returns (uint256) {
         return s_userAmount[_id][_addr];
     }
 }
